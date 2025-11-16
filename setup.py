@@ -13,7 +13,8 @@ setup(
         "plotly>=5.22.0",
         "psutil>=5.9.8",
         "pyarrow>=16.1.0",
-        "numpy>=1.26.4"
+        "numpy>=1.26.4",
+        "requests>=2.31.0"
     ],
     python_requires=">=3.8",
     entry_points={

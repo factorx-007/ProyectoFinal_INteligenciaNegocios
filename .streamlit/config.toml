@@ -1,0 +1,18 @@
+[server]
+port = 8501
+headless = true
+
+[theme]
+base = "light"
+primaryColor = "#ff4b4b"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+
+[runner]
+fastReruns = true
+
+[client]
+showErrorDetails = false
+toolbarMode = "minimal"
