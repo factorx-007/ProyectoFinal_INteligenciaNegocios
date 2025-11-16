@@ -71,7 +71,7 @@ def cargar_datos(forzar_actualizacion=False):
         if not os.path.exists(ruta_archivo):
             st.info("Descargando dataset desde Google Drive...")
             # Reemplaza 'YOUR_GOOGLE_DRIVE_FILE_ID' con el ID real del archivo en Google Drive
-            if not st.session_state.procesador.descargar_dataset('YOUR_GOOGLE_DRIVE_FILE_ID'):
+            if not st.session_state.procesador.descargar_dataset():
                 st.error(f"No se encontró el archivo de datos: {ruta_archivo}")
                 st.info("Por favor, asegúrate de que el archivo Casos_positivos_de_COVID-19_en_Colombia.csv está en el directorio del proyecto o se puede descargar desde Google Drive.")
                 return False
