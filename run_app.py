@@ -36,10 +36,30 @@ def main():
         print("La aplicación estará disponible en http://localhost:8501")
         print()
         
+        # Verificar si estamos en un entorno de deployment con límites de memoria
+        import psutil
+        memory_gb = psutil.virtual_memory().total / (1024**3)
+        
+        # Construir comando de Streamlit con configuración adecuada
+        cmd = [
+            sys.executable, "-m", "streamlit", "run", "app_analisis_covid.py",
+            "--server.port=8502",  # Usar puerto 8502 en lugar de 8501
+            "--server.headless=true",
+            "--global.developmentMode=false"
+        ]
+        
+        # Mostrar el puerto que se está usando
+        print("La aplicación estará disponible en http://localhost:8502")
+        
+        # Agregar configuración adicional para entornos con recursos limitados
+        if memory_gb < 4:  # Si hay menos de 4GB de RAM
+            cmd.extend([
+                "--logger.level=warning",
+                "--global.disableWatchdogWarning=true"
+            ])
+        
         # Usar subprocess para ejecutar Streamlit
-        subprocess.run([
-            sys.executable, "-m", "streamlit", "run", "app_analisis_covid.py"
-        ], check=True)
+        subprocess.run(cmd, check=True)
         
     except subprocess.CalledProcessError as e:
         print(f"❌ Error al ejecutar la aplicación: {e}")

@@ -5,19 +5,22 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 import time
-import numpy as np
-import json
-from pathlib import Path
-from procesamiento import ProcesadorCOVID
-from analisis import AnalizadorCOVID
 
-# Configuración de la página
+# Configuración inicial para entornos de deployment
 st.set_page_config(
     page_title="Análisis COVID-19 Colombia",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+import numpy as np
+import json
+from pathlib import Path
+from procesamiento import ProcesadorCOVID
+from analisis import AnalizadorCOVID
+
+# La configuración de la página se hace al inicio del archivo
+# para evitar problemas en entornos de deployment
 
 # Título y descripción
 st.title("📊 Proyecto Final Inteligencia De Negocios")
@@ -1450,3 +1453,4 @@ if __name__ == "__main__":
             'tamaño_datos': len(st.session_state.df_muestra) if st.session_state.datos_cargados and st.session_state.df_muestra is not None else 0,
             'filtros_activos': st.session_state.filtros_activos if 'filtros_activos' in st.session_state else {}
         })
+
