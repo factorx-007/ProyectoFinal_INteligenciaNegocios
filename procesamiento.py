@@ -36,7 +36,11 @@ class ProcesadorCOVID:
         
     def cargar_desde_cache(self):
         """Carga los datos desde el archivo parquet de caché"""
-        return dd.read_parquet(self.ruta_parquet)
+        try:
+            return dd.read_parquet(self.ruta_parquet)
+        except Exception as e:
+            print(f"Error al cargar desde caché: {e}")
+            raise e
     
     def cargar_analisis_cache(self):
         """Carga el análisis desde el archivo JSON de caché"""
@@ -210,11 +214,9 @@ class ProcesadorCOVID:
     
     def _verificar_analisis_existente(self):
         """Verifica si ya existen análisis guardados"""
+        # Verificar solo los archivos que realmente existen
         archivos_requeridos = [
-            'estadisticas.json',
-            'analisis/evolucion_mensual.parquet',
-            'analisis/por_departamento.parquet',
-            'analisis/por_edad.parquet'
+            'estadisticas.json'
         ]
         
         return all(os.path.exists(os.path.join(self.directorio_temporal, f)) for f in archivos_requeridos)
@@ -244,7 +246,8 @@ class ProcesadorCOVID:
     def obtener_estadisticas(self, df=None):
         """Obtiene estadísticas básicas del conjunto de datos"""
         if df is None:
-            if hasattr(self, 'analisis'):
+            # Verificar si existe el atributo analisis
+            if hasattr(self, 'analisis') and self.analisis is not None:
                 return self.analisis
             return {}
             

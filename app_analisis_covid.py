@@ -4,7 +4,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
-import psutil
 import time
 import numpy as np
 import json
@@ -39,9 +38,8 @@ if 'datos_cargados' not in st.session_state:
     }
 
 def get_memory_usage():
-    """Obtiene el uso de memoria actual en MB"""
-    process = psutil.Process()
-    return process.memory_info().rss / (1024 * 1024)
+    """Obtiene el uso de memoria actual en MB (simulado para evitar problemas de deployment)"""
+    return 0
 
 def verificar_archivos_cache():
     """Verifica si existen los archivos de caché necesarios"""
@@ -60,6 +58,13 @@ def cargar_datos(forzar_actualizacion=False):
         start_time = time.time()
         mem_before = get_memory_usage()
         
+        # Verificar si los archivos de datos existen antes de intentar cargarlos
+        ruta_archivo = 'Casos_positivos_de_COVID-19_en_Colombia.csv'
+        if not os.path.exists(ruta_archivo):
+            st.error(f"No se encontró el archivo de datos: {ruta_archivo}")
+            st.info("Por favor, asegúrate de que el archivo Casos_positivos_de_COVID-19_en_Colombia.csv está en el directorio del proyecto.")
+            return False
+        
         with st.spinner('Cargando y procesando datos (esto puede tomar varios minutos la primera vez)...'):
             ruta_archivo = 'Casos_positivos_de_COVID-19_en_Colombia.csv'
             
@@ -67,8 +72,13 @@ def cargar_datos(forzar_actualizacion=False):
             
             if cache_existente and not forzar_actualizacion:
                 try:
+                    # Intentar cargar desde caché con manejo de errores mejorado
                     st.session_state.datos_completos = st.session_state.procesador.cargar_desde_cache()
                     st.session_state.analisis = st.session_state.procesador.cargar_analisis_cache()
+                    
+                    # Verificar que los datos se cargaron correctamente
+                    if st.session_state.analisis is None or len(st.session_state.analisis) == 0:
+                        raise Exception("Los datos de análisis del caché están vacíos")
                     
                     st.session_state.df_muestra = st.session_state.procesador.obtener_muestreo_aleatorio(
                         st.session_state.datos_completos, 
@@ -82,16 +92,15 @@ def cargar_datos(forzar_actualizacion=False):
                     st.session_state.metrics = {
                         'tiempo_carga': tiempo_ejecucion,
                         'memoria_usada': mem_after - mem_before,
-                        'total_registros': len(st.session_state.datos_completos),
-                        'ultima_actualizacion': st.session_state.analisis.get('ultima_actualizacion', 'N/A'),
+                        'total_registros': len(st.session_state.datos_completos) if st.session_state.datos_completos is not None else 0,
+                        'ultima_actualizacion': st.session_state.analisis.get('ultima_actualizacion', 'N/A') if st.session_state.analisis else 'N/A',
                         'cargado_desde_cache': True
                     }
                     
                     st.success(
                         f"¡Datos cargados desde caché! • "
                         f"{st.session_state.metrics['total_registros']:,} registros • "
-                        f"Tiempo: {tiempo_ejecucion:.2f}s • "
-                        f"Memoria: {mem_after - mem_before:.2f}MB"
+                        f"Tiempo: {tiempo_ejecucion:.2f}s"
                     )
                     return True
                 except Exception as e:
@@ -205,24 +214,30 @@ with st.sidebar:
                 'estados': estado_seleccionado
             }
             
-            df_filtrado = st.session_state.df_muestra.copy()
-            
-            if fecha_inicio or fecha_fin:
-                df_filtrado = st.session_state.procesador.filtrar_por_fecha(
-                    df_filtrado, 
-                    fecha_inicio=fecha_inicio, 
-                    fecha_fin=fecha_fin
-                )
-            
-            if departamento_seleccionado:
-                df_filtrado = df_filtrado[df_filtrado['departamento'].isin(departamento_seleccionado)]
-            
-            if estado_seleccionado:
-                df_filtrado = df_filtrado[df_filtrado['estado'].isin(estado_seleccionado)]
-            
-            st.session_state.df_filtrado = df_filtrado
-            
-            st.caption(f"📊 Mostrando {len(df_filtrado):,} de {len(st.session_state.df_muestra):,} registros")
+            # Verificar que df_muestra no sea None antes de copiar
+            if st.session_state.df_muestra is not None:
+                df_filtrado = st.session_state.df_muestra.copy()
+                
+                # Aplicar filtros solo si el procesador está disponible
+                if st.session_state.procesador is not None:
+                    if fecha_inicio or fecha_fin:
+                        df_filtrado = st.session_state.procesador.filtrar_por_fecha(
+                            df_filtrado, 
+                            fecha_inicio=fecha_inicio, 
+                            fecha_fin=fecha_fin
+                        )
+                
+                if departamento_seleccionado:
+                    df_filtrado = df_filtrado[df_filtrado['departamento'].isin(departamento_seleccionado)]
+                
+                if estado_seleccionado:
+                    df_filtrado = df_filtrado[df_filtrado['estado'].isin(estado_seleccionado)]
+                
+                st.session_state.df_filtrado = df_filtrado
+                
+                st.caption(f"📊 Mostrando {len(df_filtrado):,} de {len(st.session_state.df_muestra):,} registros")
+            else:
+                st.warning("No hay datos cargados para filtrar")
             
         except Exception as e:
             st.error(f"Error en filtros: {str(e)}")
@@ -1377,40 +1392,34 @@ def mostrar_metricas_globales():
 
 # Código principal
 if __name__ == "__main__":
+    # Mostrar información de bienvenida
+    st.markdown("""
+    # Análisis de Datos de COVID-19 en Colombia
+    
+    ### Fuente
+    [Datos Abiertos Colombia - Casos positivos de COVID-19](https://www.datos.gov.co/Salud-y-Protecci-n-Social/Casos-positivos-de-COVID-19-en-Colombia/gt2j-8ykr)
+    
+    ### Información
+    - **Actualización**: Los datos se actualizan periódicamente
+    - **Contenido**: Registros de casos positivos de COVID-19 en Colombia
+    
+    ### Instrucciones
+    1. Haz clic en 'Cargar Datos' en la barra lateral para comenzar el análisis
+    2. Espera a que se carguen los datos (puede tomar varios minutos la primera vez)
+    3. Usa los filtros en la barra lateral para personalizar la visualización
+    4. Explora las diferentes pestañas para ver distintos tipos de análisis
+    """)
+    
+    # Mostrar advertencia si los datos no están cargados
     if not st.session_state.datos_cargados:
-        st.warning("Por favor, haz clic en 'Cargar Datos' en la barra lateral para comenzar el análisis.")
-        
-        st.markdown("""
-        ### Acerca de los datos
-        Esta aplicación analiza los datos de casos positivos de COVID-19 en Colombia.
-        
-        Para comenzar:
-        1. Haz clic en 'Cargar Datos' en la barra lateral
-        2. Espera a que se carguen los datos (puede tomar varios minutos la primera vez)
-        3. Usa los filtros para explorar los datos
-        
-        Los datos se cargarán en la memoria y estarán disponibles para su análisis.
-        """)
+        st.info("👆 Haz clic en 'Cargar Datos' en la barra lateral para comenzar el análisis.")
     else:
+        # Mostrar métricas de rendimiento si están disponibles
         if 'metrics' in st.session_state:
             st.sidebar.metric("Tiempo de carga (s)", f"{st.session_state.metrics['tiempo_carga']:.2f}")
-            st.sidebar.metric("Uso de memoria (MB)", f"{st.session_state.metrics['memoria_usada']:.2f}")
+            # st.sidebar.metric("Uso de memoria (MB)", f"{st.session_state.metrics['memoria_usada']:.2f}")
         
-        st.markdown("""
-        # Análisis de Datos de COVID-19 en Colombia
-        
-        ### Fuente
-        [Datos Abiertos Colombia - Casos positivos de COVID-19](https://www.datos.gov.co/Salud-y-Protecci-n-Social/Casos-positivos-de-COVID-19-en-Colombia/gt2j-8ykr)
-        
-        ### Información
-        - **Actualización**: Los datos se actualizan periódicamente
-        - **Contenido**: Registros de casos positivos de COVID-19 en Colombia
-        
-        ### Instrucciones
-        1. Usa los filtros en la barra lateral para personalizar la visualización
-        2. Explora las diferentes pestañas para ver distintos tipos de análisis
-        """)
-        
+        # Crear pestañas para diferentes análisis
         tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
             "📊 Resumen", "📈 Temporal", "🗺️ Departamentos", "👥 Edades", 
             "📅 Tendencias", "🔬 Avanzado", "🗺️ Geográfico", "📈 Globales"
@@ -1433,10 +1442,11 @@ if __name__ == "__main__":
         with tab8:
             mostrar_metricas_globales()
     
-    if st.sidebar.checkbox("Mostrar información de depuración"):
+    # Información de depuración (opcional)
+    if st.sidebar.checkbox("Mostrar información de depuración", key="debug_info"):
         st.sidebar.write("### Estado de la aplicación")
         st.sidebar.json({
             'datos_cargados': st.session_state.datos_cargados,
-            'tamaño_datos': len(st.session_state.df_muestra) if st.session_state.datos_cargados else 0,
+            'tamaño_datos': len(st.session_state.df_muestra) if st.session_state.datos_cargados and st.session_state.df_muestra is not None else 0,
             'filtros_activos': st.session_state.filtros_activos if 'filtros_activos' in st.session_state else {}
         })
