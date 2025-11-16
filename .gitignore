@@ -136,6 +136,7 @@ Thumbs.db
 # Data files (large files that exceed GitHub limits)
 datos_procesados/datos_covid.parquet
 
+
 # Data files (uncomment if you want to ignore processed data)
 # datos_procesados/
 # *.json
