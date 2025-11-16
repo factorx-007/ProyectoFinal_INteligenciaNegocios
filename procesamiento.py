@@ -6,6 +6,7 @@ import pyarrow.parquet as pq
 import pyarrow as pa
 import numpy as np
 import json
+import requests
 from pathlib import Path
 
 class ProcesadorCOVID:
@@ -34,6 +35,35 @@ class ProcesadorCOVID:
         # Crear directorios necesarios
         os.makedirs(self.directorio_temporal, exist_ok=True)
         
+    def descargar_dataset(self, file_id='1agwpqQa_Yv7GD5Gzu7RJuG0HqpOk2c0r'):
+        """
+        Descarga el dataset desde Google Drive si no existe localmente.
+        Reemplaza 'YOUR_GOOGLE_DRIVE_FILE_ID' con el ID real del archivo en Google Drive.
+        """
+        if os.path.exists(self.ruta_archivo):
+            print(f"El archivo {self.ruta_archivo} ya existe localmente.")
+            return True
+            
+        try:
+            print("Descargando dataset desde Google Drive...")
+            # URL para descargar archivo de Google Drive
+            url = f"https://drive.google.com/uc?id={file_id}&export=download"
+            
+            # Realizar la descarga
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+            
+            # Guardar el archivo
+            with open(self.ruta_archivo, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            print(f"Dataset descargado exitosamente a {self.ruta_archivo}")
+            return True
+        except Exception as e:
+            print(f"Error al descargar el dataset: {e}")
+            return False
+    
     def cargar_desde_cache(self):
         """Carga los datos desde el archivo parquet de caché"""
         try:

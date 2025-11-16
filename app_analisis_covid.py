@@ -63,15 +63,21 @@ def cargar_datos(forzar_actualizacion=False):
         
         # Verificar si los archivos de datos existen antes de intentar cargarlos
         ruta_archivo = 'Casos_positivos_de_COVID-19_en_Colombia.csv'
+        
+        # Crear procesador
+        st.session_state.procesador = ProcesadorCOVID(ruta_archivo)
+        
+        # Intentar descargar el dataset si no existe localmente
         if not os.path.exists(ruta_archivo):
-            st.error(f"No se encontró el archivo de datos: {ruta_archivo}")
-            st.info("Por favor, asegúrate de que el archivo Casos_positivos_de_COVID-19_en_Colombia.csv está en el directorio del proyecto.")
-            return False
+            st.info("Descargando dataset desde Google Drive...")
+            # Reemplaza 'YOUR_GOOGLE_DRIVE_FILE_ID' con el ID real del archivo en Google Drive
+            if not st.session_state.procesador.descargar_dataset('YOUR_GOOGLE_DRIVE_FILE_ID'):
+                st.error(f"No se encontró el archivo de datos: {ruta_archivo}")
+                st.info("Por favor, asegúrate de que el archivo Casos_positivos_de_COVID-19_en_Colombia.csv está en el directorio del proyecto o se puede descargar desde Google Drive.")
+                return False
         
         with st.spinner('Cargando y procesando datos (esto puede tomar varios minutos la primera vez)...'):
             ruta_archivo = 'Casos_positivos_de_COVID-19_en_Colombia.csv'
-            
-            st.session_state.procesador = ProcesadorCOVID(ruta_archivo)
             
             if cache_existente and not forzar_actualizacion:
                 try:
@@ -999,59 +1005,23 @@ def mostrar_comparativas_geographicas():
                     porcentaje_top = (df_municipios.head(10)['Casos'].sum() / df_municipios['Casos'].sum() * 100)
                     st.metric("📊 % Top 10", f"{porcentaje_top:.1f}%")
                 
-                # Gráfico de barras top 20
-                st.markdown("#### 📊 Top 20 Municipios")
+                # Gráfico de barras
                 fig = px.bar(
-                    df_municipios.head(20).sort_values('Casos', ascending=True),
+                    df_municipios.head(20),
                     x='Casos',
                     y='Municipio',
                     orientation='h',
+                    title='Top 20 Municipios con Más Casos',
                     color='Casos',
-                    color_continuous_scale='Reds',
-                    title='20 Municipios con Mayor Número de Casos',
-                    text='Casos'
+                    color_continuous_scale='Blues'
                 )
-                fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-                fig.update_layout(height=700)
+                fig.update_layout(height=600)
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Comparación visual
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("#### 🥧 Proporción Top 15")
-                    fig_pie = px.pie(
-                        df_municipios.head(15),
-                        values='Casos',
-                        names='Municipio',
-                        title='Distribución de Casos - Top 15 Municipios'
-                    )
-                    st.plotly_chart(fig_pie, use_container_width=True)
-                
-                with col2:
-                    st.markdown("#### 📈 Tendencia Acumulada")
-                    df_municipios['Casos_Acum'] = df_municipios['Casos'].cumsum()
-                    df_municipios['Porc_Acum'] = (df_municipios['Casos_Acum'] / df_municipios['Casos'].sum() * 100)
-                    fig_line = px.line(
-                        df_municipios.head(30),
-                        y='Porc_Acum',
-                        title='Porcentaje Acumulado - Top 30',
-                        labels={'Porc_Acum': '% Acumulado', 'index': 'Posición'}
-                    )
-                    fig_line.add_hline(y=80, line_dash="dash", line_color="red", annotation_text="80%")
-                    st.plotly_chart(fig_line, use_container_width=True)
-                
                 # Tabla detallada
-                st.markdown("#### 📋 Datos Detallados")
+                st.markdown("#### 📋 Datos Completos")
                 df_municipios['Porcentaje'] = (df_municipios['Casos'] / df_municipios['Casos'].sum() * 100).round(2)
-                df_municipios['Posición'] = range(1, len(df_municipios) + 1)
-                st.dataframe(
-                    df_municipios[['Posición', 'Municipio', 'Casos', 'Porcentaje']],
-                    use_container_width=True,
-                    column_config={
-                        'Casos': st.column_config.NumberColumn(format='%d'),
-                        'Porcentaje': st.column_config.NumberColumn(format='%.2f%%')
-                    }
-                )
+                st.dataframe(df_municipios, use_container_width=True)
             else:
                 st.info("📊 No hay datos de municipios disponibles")
         except Exception as e:
@@ -1061,396 +1031,52 @@ def mostrar_comparativas_geographicas():
                 st.code(traceback.format_exc())
     
     with tab_evolucion_dpto:
-        try:
-            st.markdown("### 📊 Evolución Mensual por Departamento")
-            if 'top_departamentos' in st.session_state.analisis and st.session_state.datos_cargados:
-                top_deptos = list(st.session_state.analisis['top_departamentos'].keys())[:5]
-                
-                st.info(f"👉 Analizando los 5 departamentos principales: {', '.join(top_deptos)}")
-                
-                if st.session_state.df_muestra is not None:
-                    df_filtrado = st.session_state.df_muestra.copy()
-                    
-                    if 'departamento' in df_filtrado.columns and 'fecha_de_notificacion' in df_filtrado.columns:
-                        df_filtrado = df_filtrado[df_filtrado['departamento'].isin(top_deptos)]
-                        
-                        if not df_filtrado.empty:
-                            # Evolución mensual
-                            df_evolucion = df_filtrado.set_index('fecha_de_notificacion').groupby(
-                                [pd.Grouper(freq='M'), 'departamento']
-                            ).size().reset_index(name='Casos')
-                            
-                            if not df_evolucion.empty:
-                                # Gráfico de líneas
-                                fig = px.line(
-                                    df_evolucion,
-                                    x='fecha_de_notificacion',
-                                    y='Casos',
-                                    color='departamento',
-                                    title='Evolución Mensual de Casos - Top 5 Departamentos',
-                                    markers=True,
-                                    labels={'fecha_de_notificacion': 'Fecha', 'Casos': 'Número de Casos'}
-                                )
-                                fig.update_layout(height=500, hovermode='x unified')
-                                st.plotly_chart(fig, use_container_width=True)
-                                
-                                # Gráfico de área apilada
-                                st.markdown("#### 📊 Área Apilada")
-                                fig_area = px.area(
-                                    df_evolucion,
-                                    x='fecha_de_notificacion',
-                                    y='Casos',
-                                    color='departamento',
-                                    title='Contribución Acumulada por Departamento'
-                                )
-                                st.plotly_chart(fig_area, use_container_width=True)
-                                
-                                # Estadísticas por departamento
-                                st.markdown("#### 📋 Estadísticas por Departamento")
-                                stats_deptos = df_evolucion.groupby('departamento')['Casos'].agg([
-                                    ('Total', 'sum'),
-                                    ('Promedio Mensual', 'mean'),
-                                    ('Máximo', 'max'),
-                                    ('Mínimo', 'min')
-                                ]).reset_index()
-                                st.dataframe(stats_deptos, use_container_width=True)
-                            else:
-                                st.warning("⚠️ No hay suficientes datos para la evolución")
-                        else:
-                            st.warning("⚠️ No se encontraron datos para los departamentos seleccionados")
-                    else:
-                        st.error("❌ Columnas requeridas no encontradas en los datos")
-                else:
-                    st.warning("⚠️ No hay muestra de datos disponible")
-            else:
-                st.info("📊 Datos de departamentos no disponibles")
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
-            with st.expander("Ver detalles"):
-                import traceback
-                st.code(traceback.format_exc())
+        st.info("📊 Funcionalidad en desarrollo")
     
     with tab_comparacion:
-        try:
-            st.markdown("### 🔍 Comparación Departamentos vs Municipios")
-            
-            if 'top_departamentos' in st.session_state.analisis and 'top_municipios' in st.session_state.analisis:
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("#### 🗺️ Top 10 Departamentos")
-                    df_dep = pd.DataFrame(
-                        list(st.session_state.analisis['top_departamentos'].items())[:10],
-                        columns=['Departamento', 'Casos']
-                    )
-                    fig_dep = px.bar(
-                        df_dep.sort_values('Casos', ascending=False),
-                        x='Departamento',
-                        y='Casos',
-                        title='Departamentos',
-                        color='Casos',
-                        color_continuous_scale='Blues'
-                    )
-                    fig_dep.update_layout(xaxis_tickangle=-45)
-                    st.plotly_chart(fig_dep, use_container_width=True)
-                
-                with col2:
-                    st.markdown("#### 🏘️ Top 10 Municipios")
-                    df_mun = pd.DataFrame(
-                        list(st.session_state.analisis['top_municipios'].items())[:10],
-                        columns=['Municipio', 'Casos']
-                    )
-                    fig_mun = px.bar(
-                        df_mun.sort_values('Casos', ascending=False),
-                        x='Municipio',
-                        y='Casos',
-                        title='Municipios',
-                        color='Casos',
-                        color_continuous_scale='Reds'
-                    )
-                    fig_mun.update_layout(xaxis_tickangle=-45)
-                    st.plotly_chart(fig_mun, use_container_width=True)
-            else:
-                st.info("📊 Datos de comparación no disponibles")
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
-            with st.expander("Ver detalles"):
-                import traceback
-                st.code(traceback.format_exc())
+        st.info("📊 Funcionalidad en desarrollo")
 
-def mostrar_metricas_globales():
-    """Muestra métricas globales y resumen general"""
-    st.subheader("📈 Métricas Globales y Resumen Ejecutivo")
+def main():
+    """Función principal de la aplicación"""
+    # Cargar datos automáticamente al iniciar si no están cargados
+    if not st.session_state.get('datos_cargados', False):
+        cargar_datos()
     
-    if not st.session_state.analisis:
-        st.warning("⚠️ Por favor carga los datos primero")
-        return
-    
-    try:
-        # Debug info
-        with st.expander("🔍 Información de Depuración"):
-            st.write("Claves en análisis:", list(st.session_state.analisis.keys()))
-            st.write("Total de claves:", len(st.session_state.analisis))
-        
-        # Métricas principales
-        st.markdown("### 🎯 Indicadores Principales")
-        
-        if 'total_registros' in st.session_state.analisis:
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                total = st.session_state.analisis.get('total_registros', 0)
-                st.metric("👥 Total de Casos", f"{total:,}".replace(",", "."))
-            
-            with col2:
-                rango = st.session_state.analisis.get('rango_fechas', {})
-                if rango.get('max') and rango.get('min'):
-                    dias = (datetime.strptime(rango.get('max', '2020-01-01'), '%Y-%m-%d') - 
-                           datetime.strptime(rango.get('min', '2020-01-01'), '%Y-%m-%d')).days
-                    st.metric("📅 Días de Seguimiento", f"{dias:,} días")
-            
-            with col3:
-                if 'estadisticas_edad' in st.session_state.analisis:
-                    edad_promedio = st.session_state.analisis['estadisticas_edad'].get('promedio', 0)
-                    st.metric("🎂 Edad Promedio", f"{edad_promedio:.1f} años")
-            
-            with col4:
-                if 'ultima_actualizacion' in st.session_state.analisis:
-                    st.metric("🔄 Última Actualización", st.session_state.analisis['ultima_actualizacion'][:10])
-        
-        # Distribución por categorías principales
-        st.markdown("### 📊 Distribución por Categorías")
-        
-        if 'conteo_por_estado' in st.session_state.analisis:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("#### 🟢 Por Estado del Caso")
-                df_estados = pd.DataFrame(
-                    list(st.session_state.analisis['conteo_por_estado'].items()),
-                    columns=['Estado', 'Casos']
-                ).sort_values('Casos', ascending=False)
-                
-                fig_estados = px.bar(
-                    df_estados,
-                    x='Estado',
-                    y='Casos',
-                    title='Casos por Estado',
-                    color='Estado',
-                    text='Casos',
-                    color_discrete_sequence=px.colors.qualitative.Set3
-                )
-                fig_estados.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-                fig_estados.update_layout(showlegend=False)
-                st.plotly_chart(fig_estados, use_container_width=True)
-            
-            with col2:
-                st.markdown("#### 🥧 Proporción")
-                fig_pie_estados = px.pie(
-                    df_estados,
-                    values='Casos',
-                    names='Estado',
-                    title='Distribución Porcentual por Estado',
-                    hole=0.4
-                )
-                st.plotly_chart(fig_pie_estados, use_container_width=True)
-        
-        # Resumen de departamentos
-        if 'top_departamentos' in st.session_state.analisis:
-            st.markdown("### 🗺️ Resumen por Departamentos")
-            
-            df_resumen_deptos = pd.DataFrame(
-                list(st.session_state.analisis['top_departamentos'].items()),
-                columns=['Departamento', 'Total Casos']
-            ).sort_values('Total Casos', ascending=False)
-            
-            # Métricas de departamentos
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("🎯 Total Departamentos", len(df_resumen_deptos))
-            with col2:
-                st.metric("🥇 Departamento Líder", df_resumen_deptos.iloc[0]['Departamento'])
-            with col3:
-                top_casos = df_resumen_deptos.iloc[0]['Total Casos']
-                st.metric("📈 Casos Líder", f"{top_casos:,.0f}")
-            
-            # Agregar porcentaje y estadísticas
-            total_casos = df_resumen_deptos['Total Casos'].sum()
-            df_resumen_deptos['Porcentaje'] = (df_resumen_deptos['Total Casos'] / total_casos * 100).round(2)
-            df_resumen_deptos['% Acumulado'] = df_resumen_deptos['Porcentaje'].cumsum().round(2)
-            df_resumen_deptos['Posición'] = range(1, len(df_resumen_deptos) + 1)
-            
-            # Gráfico de Pareto
-            st.markdown("#### 📉 Análisis de Pareto")
-            fig_pareto = go.Figure()
-            
-            # Barras
-            fig_pareto.add_trace(go.Bar(
-                x=df_resumen_deptos['Departamento'],
-                y=df_resumen_deptos['Total Casos'],
-                name='Casos',
-                marker_color='lightblue',
-                yaxis='y'
-            ))
-            
-            # Línea acumulada
-            fig_pareto.add_trace(go.Scatter(
-                x=df_resumen_deptos['Departamento'],
-                y=df_resumen_deptos['% Acumulado'],
-                name='% Acumulado',
-                marker_color='red',
-                yaxis='y2',
-                mode='lines+markers'
-            ))
-            
-            fig_pareto.add_hline(y=80, line_dash="dash", line_color="green", annotation_text="80%", yref='y2')
-            
-            fig_pareto.update_layout(
-                title='Diagrama de Pareto - Departamentos',
-                xaxis=dict(title='Departamento', tickangle=-45),
-                yaxis=dict(title='Número de Casos', side='left'),
-                yaxis2=dict(title='% Acumulado', side='right', overlaying='y', range=[0, 105]),
-                hovermode='x unified',
-                height=500
-            )
-            
-            st.plotly_chart(fig_pareto, use_container_width=True)
-            
-            # Tabla detallada con formato mejorado
-            st.markdown("#### 📋 Tabla Detallada de Departamentos")
-            st.dataframe(
-                df_resumen_deptos[['Posición', 'Departamento', 'Total Casos', 'Porcentaje', '% Acumulado']],
-                use_container_width=True,
-                column_config={
-                    'Posición': st.column_config.NumberColumn(format='%d'),
-                    'Total Casos': st.column_config.NumberColumn(format='%d'),
-                    'Porcentaje': st.column_config.NumberColumn(format='%.2f%%'),
-                    '% Acumulado': st.column_config.NumberColumn(format='%.2f%%')
-                }
-            )
-        
-        # Resumen estadístico adicional
-        st.markdown("### 📊 Estadísticas Avanzadas")
-        
+    # Mostrar métricas si los datos están cargados
+    if st.session_state.datos_cargados and st.session_state.metrics:
+        metrics = st.session_state.metrics
         col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if 'conteo_por_sexo' in st.session_state.analisis:
-                st.markdown("#### 👩‍🤝‍👨 Sexo")
-                sexo_data = st.session_state.analisis['conteo_por_sexo']
-                for sexo, cantidad in sexo_data.items():
-                    st.metric(sexo, f"{cantidad:,.0f}")
-        
-        with col2:
-            if 'estadisticas_edad' in st.session_state.analisis:
-                st.markdown("#### 🎂 Edad")
-                edad_stats = st.session_state.analisis['estadisticas_edad']
-                st.metric("Media", f"{edad_stats.get('promedio', 0):.1f}")
-                st.metric("Mediana", f"{edad_stats.get('mediana', 0):.0f}")
-                st.metric("Desv. Est.", f"{edad_stats.get('desviacion_estandar', 0):.1f}")
-        
-        with col3:
-            if 'top_departamentos' in st.session_state.analisis:
-                st.markdown("#### 🗺️ Geografía")
-                st.metric("Departamentos", len(st.session_state.analisis['top_departamentos']))
-                if 'top_municipios' in st.session_state.analisis:
-                    st.metric("Municipios", len(st.session_state.analisis['top_municipios']))
-        
-        # Resumen temporal
-        if 'casos_por_mes' in st.session_state.analisis:
-            st.markdown("### 📅 Resumen Temporal")
-            df_meses = pd.DataFrame(
-                [(k, v) for k, v in st.session_state.analisis['casos_por_mes'].items()],
-                columns=['Fecha', 'Casos']
-            )
-            df_meses['Fecha'] = pd.to_datetime(df_meses['Fecha'])
-            df_meses = df_meses.sort_values('Fecha')
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                max_casos = df_meses['Casos'].max()
-                st.metric("🔺 Pico Máximo", f"{max_casos:,.0f}")
-            with col2:
-                fecha_pico = df_meses[df_meses['Casos'] == max_casos]['Fecha'].iloc[0]
-                st.metric("📅 Fecha Pico", fecha_pico.strftime('%Y-%m'))
-            with col3:
-                promedio_mensual = df_meses['Casos'].mean()
-                st.metric("📊 Promedio Mensual", f"{promedio_mensual:,.0f}")
-            
-            # Miniatura de evolución
-            fig_mini = px.area(
-                df_meses,
-                x='Fecha',
-                y='Casos',
-                title='Vista Rápida - Evolución Mensual'
-            )
-            fig_mini.update_layout(height=300)
-            st.plotly_chart(fig_mini, use_container_width=True)
-        
-    except Exception as e:
-        st.error(f"❌ Error en métricas globales: {str(e)}")
-        with st.expander("Ver detalles del error"):
-            import traceback
-            st.code(traceback.format_exc())
+        col1.metric("💾 Registros", f"{metrics['total_registros']:,}")
+        col2.metric("⏱️ Tiempo de carga", f"{metrics['tiempo_carga']:.2f}s")
+        col3.metric("🔄 Fuente", "Caché" if metrics['cargado_desde_cache'] else "CSV")
+    
+    # Crear pestañas para diferentes secciones
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📈 Estadísticas Generales", 
+        "📅 Evolución Temporal", 
+        "🗺️ Departamentos", 
+        "👥 Pirámide de Edades",
+        "🔬 Análisis Avanzado",
+        "🏘️ Comparativas Geográficas"
+    ])
+    
+    with tab1:
+        mostrar_estadisticas_generales()
+    
+    with tab2:
+        mostrar_evolucion_temporal()
+    
+    with tab3:
+        mostrar_distribucion_departamentos()
+    
+    with tab4:
+        mostrar_piramide_edades()
+    
+    with tab5:
+        mostrar_analisis_avanzado()
+    
+    with tab6:
+        mostrar_comparativas_geographicas()
 
-# Código principal
 if __name__ == "__main__":
-    # Mostrar información de bienvenida
-    st.markdown("""
-    # Análisis de Datos de COVID-19 en Colombia
-    
-    ### Fuente
-    [Datos Abiertos Colombia - Casos positivos de COVID-19](https://www.datos.gov.co/Salud-y-Protecci-n-Social/Casos-positivos-de-COVID-19-en-Colombia/gt2j-8ykr)
-    
-    ### Información
-    - **Actualización**: Los datos se actualizan periódicamente
-    - **Contenido**: Registros de casos positivos de COVID-19 en Colombia
-    
-    ### Instrucciones
-    1. Haz clic en 'Cargar Datos' en la barra lateral para comenzar el análisis
-    2. Espera a que se carguen los datos (puede tomar varios minutos la primera vez)
-    3. Usa los filtros en la barra lateral para personalizar la visualización
-    4. Explora las diferentes pestañas para ver distintos tipos de análisis
-    """)
-    
-    # Mostrar advertencia si los datos no están cargados
-    if not st.session_state.datos_cargados:
-        st.info("👆 Haz clic en 'Cargar Datos' en la barra lateral para comenzar el análisis.")
-    else:
-        # Mostrar métricas de rendimiento si están disponibles
-        if 'metrics' in st.session_state:
-            st.sidebar.metric("Tiempo de carga (s)", f"{st.session_state.metrics['tiempo_carga']:.2f}")
-            # st.sidebar.metric("Uso de memoria (MB)", f"{st.session_state.metrics['memoria_usada']:.2f}")
-        
-        # Crear pestañas para diferentes análisis
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-            "📊 Resumen", "📈 Temporal", "🗺️ Departamentos", "👥 Edades", 
-            "📅 Tendencias", "🔬 Avanzado", "🗺️ Geográfico", "📈 Globales"
-        ])
-        
-        with tab1:
-            mostrar_estadisticas_generales()
-        with tab2:
-            mostrar_evolucion_temporal()
-        with tab3:
-            mostrar_distribucion_departamentos()
-        with tab4:
-            mostrar_piramide_edades()
-        with tab5:
-            mostrar_tendencias_temporales()
-        with tab6:
-            mostrar_analisis_avanzado()
-        with tab7:
-            mostrar_comparativas_geographicas()
-        with tab8:
-            mostrar_metricas_globales()
-    
-    # Información de depuración (opcional)
-    if st.sidebar.checkbox("Mostrar información de depuración", key="debug_info"):
-        st.sidebar.write("### Estado de la aplicación")
-        st.sidebar.json({
-            'datos_cargados': st.session_state.datos_cargados,
-            'tamaño_datos': len(st.session_state.df_muestra) if st.session_state.datos_cargados and st.session_state.df_muestra is not None else 0,
-            'filtros_activos': st.session_state.filtros_activos if 'filtros_activos' in st.session_state else {}
-        })
-
+    main()
