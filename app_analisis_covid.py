@@ -52,6 +52,20 @@ def verificar_archivos_cache():
 def cargar_datos(forzar_actualizacion=False):
     """Carga los datos con monitoreo de recursos y análisis en caché"""
     try:
+        # Si se solicita forzar actualización, eliminar archivos de caché
+        if forzar_actualizacion:
+            cache_files = [
+                'datos_procesados/datos_covid.parquet',
+                'datos_procesados/estadisticas.json'
+            ]
+            for cache_file in cache_files:
+                if os.path.exists(cache_file):
+                    try:
+                        os.remove(cache_file)
+                        st.info(f"🗑️ Eliminado archivo de caché: {cache_file}")
+                    except Exception as e:
+                        st.warning(f"⚠️ No se pudo eliminar {cache_file}: {e}")
+        
         if not forzar_actualizacion and st.session_state.get('datos_cargados', False):
             st.info("Usando datos cargados previamente. Usa 'Forzar Actualización' si necesitas recargar los datos.")
             return True
@@ -78,6 +92,15 @@ def cargar_datos(forzar_actualizacion=False):
         
         with st.spinner('Cargando y procesando datos (esto puede tomar varios minutos la primera vez)...'):
             ruta_archivo = 'Casos_positivos_de_COVID-19_en_Colombia.csv'
+            
+            # Verificar el tamaño del archivo para determinar si es el completo o muestra
+            if os.path.exists(ruta_archivo):
+                file_size = os.path.getsize(ruta_archivo) / (1024 * 1024)  # MB
+                st.info(f"📁 Tamaño del archivo: {file_size:.1f} MB")
+                
+                # Si el archivo es muy pequeño (< 10MB), probablemente es muestra
+                if file_size < 10 and not forzar_actualizacion and cache_existente:
+                    st.warning("⚠️ El archivo parece ser una muestra. Considera forzar la actualización para procesar el archivo completo.")
             
             if cache_existente and not forzar_actualizacion:
                 try:
